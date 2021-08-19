@@ -13,10 +13,11 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 #
-
+import re
 from os import listdir
 from os.path import isfile, join
 import importlib
+from typing import Union
 
 from file import File
 from function import Function
@@ -79,7 +80,7 @@ class Generator:
             return getattr(module, class_name)
 
     @staticmethod
-    def _generate_functions(controller_name: str, method_list: filter) -> [Function]:
+    def _generate_functions(controller_name: str, method_list: Union[list, filter]) -> [Function]:
         return [Function(function_name=f.__name__, controller=controller_name,
                          params=''.join(f.__doc__.split(':param ')[2:]).split(':return')[0].replace('\n', '').split(
                              '        ')[:-1]) for f in method_list]
@@ -114,6 +115,35 @@ class Generator:
                 file.class_name = class_name
                 f.write('from .' + filename + ' import ' + class_name + '\n')
 
+    @staticmethod
+    def _get_methods_without_duplicate(klass, methods: filter):
+        reg = re.compile(r'\d+$')
+        res = []
+        duplicated_dict = {}
+        for method in methods:
+            match = re.search(reg, method.__name__)
+            if match is None:
+                res.append(method)
+            else:
+                duplicated_dict.update({method.__name__: match.group()})
+        for duplicated_method in duplicated_dict:
+            first_method_name = duplicated_method.replace(duplicated_dict[duplicated_method], '')
+            for item in res:
+                if item.__name__ == first_method_name:
+                    res.remove(item)
+
+        if duplicated_dict:
+            print('!WARNING! The next controller has duplicates methods:')
+            print('⎡' + klass.__name__)
+            for i in list(duplicated_dict.keys()):
+                if len(list(duplicated_dict.keys())) == list(duplicated_dict.keys()).index(i) + 1:
+                    print('⎣  ' + i)
+                else:
+                    print('|- ' + i)
+
+            print()
+        return res
+
     def _generate_files(self, path: str, ce_files: [File], pe_files: [File], mode: str):
         files_set = pe_files + ce_files
 
@@ -142,9 +172,11 @@ class Generator:
                             if file.class_name:
                                 klass = self._import_class('tb_rest_client.api.api_ce.' + file.filename.split('.')[0],
                                                            file.class_name)
+
                                 method_list = filter(lambda x: x is not None, list(
                                     map(lambda x: getattr(klass, x) if callable(getattr(klass, x)) and x.startswith(
                                         '__') is False and '_with_http_info' not in x else None, dir(klass))))
+                                method_list = self._get_methods_without_duplicate(klass, method_list)
 
                                 function_list = self._generate_functions(file.filename.split('.')[0], method_list)
                                 s = ''
@@ -179,21 +211,29 @@ class Generator:
                                     f'tb_rest_client.api.api_ce.' + ce_file.filename.split('.')[0], ce_file.class_name)
 
                                 pe_method_list = filter(lambda x: x is not None, list(
-                                    map(lambda x: getattr(pe_klass, x) if callable(getattr(pe_klass, x)) and x.startswith(
+                                    map(lambda x: getattr(pe_klass, x) if callable(
+                                        getattr(pe_klass, x)) and x.startswith(
                                         '__') is False and '_with_http_info' not in x else None, dir(pe_klass))))
-                                pe_function_list = self._generate_functions(pe_file.filename.split('.')[0], pe_method_list)
+                                pe_method_list = self._get_methods_without_duplicate(pe_klass, pe_method_list)
+
+                                pe_function_list = self._generate_functions(pe_file.filename.split('.')[0],
+                                                                            pe_method_list)
                                 pe_function_names_dict = {func.name: func for func in pe_function_list}
 
                                 ce_method_list = filter(lambda x: x is not None, list(
-                                    map(lambda x: getattr(ce_klass, x) if callable(getattr(ce_klass, x)) and x.startswith(
+                                    map(lambda x: getattr(ce_klass, x) if callable(
+                                        getattr(ce_klass, x)) and x.startswith(
                                         '__') is False and '_with_http_info' not in x else None, dir(ce_klass))))
-                                ce_function_list = self._generate_functions(ce_file.filename.split('.')[0], ce_method_list)
+                                ce_method_list = self._get_methods_without_duplicate(ce_klass, ce_method_list)
+                                ce_function_list = self._generate_functions(ce_file.filename.split('.')[0],
+                                                                            ce_method_list)
                                 ce_function_names_dict = {func.name: func for func in ce_function_list}
 
                                 full_functions = set(ce_function_names_dict.keys()) & set(pe_function_names_dict.keys())
                                 with_the_same_params = [func[0] for func in list(
                                     filter(lambda x: x[0].params == x[1].params,
-                                           [(ce_function_names_dict[function_name], pe_function_names_dict[function_name])
+                                           [(ce_function_names_dict[function_name],
+                                             pe_function_names_dict[function_name])
                                             for function_name in full_functions]))]
                                 not_the_same_function = filter(lambda x: x not in with_the_same_params, full_functions)
 
@@ -222,11 +262,13 @@ class Generator:
                     if mode == 'controllers':
                         self._write_init_file(file, 'tb_rest_client/api/api_', file.version)
 
-                        klass = self._import_class(f'tb_rest_client.api.api_{file.version}.' + file.filename.split('.')[0],
-                                                   ''.join(word.title() for word in file.filename.split('_')).split('.')[0])
+                        klass = self._import_class(
+                            f'tb_rest_client.api.api_{file.version}.' + file.filename.split('.')[0],
+                            ''.join(word.title() for word in file.filename.split('_')).split('.')[0])
                         method_list = filter(lambda x: x is not None, list(
                             map(lambda x: getattr(klass, x) if callable(getattr(klass, x)) and x.startswith(
                                 '__') is False and '_with_http_info' not in x else None, dir(klass))))
+                        method_list = self._get_methods_without_duplicate(klass, method_list)
 
                         function_list = self._generate_functions(file.filename.split('.')[0], method_list)
 
