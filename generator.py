@@ -176,7 +176,7 @@ class Generator:
                                 method_list = filter(lambda x: x is not None, list(
                                     map(lambda x: getattr(klass, x) if callable(getattr(klass, x)) and x.startswith(
                                         '__') is False and '_with_http_info' not in x else None, dir(klass))))
-                                method_list = self._get_methods_without_duplicate(klass, method_list)
+                                # method_list = self._get_methods_without_duplicate(klass, method_list)
 
                                 function_list = self._generate_functions(file.filename.split('.')[0], method_list)
                                 s = ''
@@ -214,7 +214,7 @@ class Generator:
                                     map(lambda x: getattr(pe_klass, x) if callable(
                                         getattr(pe_klass, x)) and x.startswith(
                                         '__') is False and '_with_http_info' not in x else None, dir(pe_klass))))
-                                pe_method_list = self._get_methods_without_duplicate(pe_klass, pe_method_list)
+                                # pe_method_list = self._get_methods_without_duplicate(pe_klass, pe_method_list)
 
                                 pe_function_list = self._generate_functions(pe_file.filename.split('.')[0],
                                                                             pe_method_list)
@@ -224,31 +224,38 @@ class Generator:
                                     map(lambda x: getattr(ce_klass, x) if callable(
                                         getattr(ce_klass, x)) and x.startswith(
                                         '__') is False and '_with_http_info' not in x else None, dir(ce_klass))))
-                                ce_method_list = self._get_methods_without_duplicate(ce_klass, ce_method_list)
+                                # ce_method_list = self._get_methods_without_duplicate(ce_klass, ce_method_list)
                                 ce_function_list = self._generate_functions(ce_file.filename.split('.')[0],
                                                                             ce_method_list)
                                 ce_function_names_dict = {func.name: func for func in ce_function_list}
 
-                                full_functions = set(ce_function_names_dict.keys()) & set(pe_function_names_dict.keys())
+                                the_same_functions_by_name = set(ce_function_names_dict.keys()) & set(pe_function_names_dict.keys())
                                 with_the_same_params = [func[0] for func in list(
                                     filter(lambda x: x[0].params == x[1].params,
                                            [(ce_function_names_dict[function_name],
                                              pe_function_names_dict[function_name])
-                                            for function_name in full_functions]))]
-                                not_the_same_function = filter(lambda x: x not in with_the_same_params, full_functions)
+                                            for function_name in the_same_functions_by_name]))]
+                                not_the_same_function = []
+                                for func in set(list(ce_function_names_dict.keys()) + list(pe_function_names_dict.keys())):
+                                    if func in ce_function_names_dict and func not in pe_function_names_dict or \
+                                        (func in the_same_functions_by_name and ce_function_names_dict[func] not in with_the_same_params and ce_function_names_dict[func] not in not_the_same_function):
+                                        not_the_same_function.append(ce_function_names_dict[func])
+                                    elif func in pe_function_names_dict and func not in ce_function_names_dict or \
+                                            (func in the_same_functions_by_name and func not in with_the_same_params):
+                                        not_the_same_function.append(pe_function_names_dict[func])
 
                                 try:
                                     for i in with_the_same_params:
                                         self._rest_client_base.methods_section = i.str_function + '\n'
 
                                     for i in not_the_same_function:
-                                        if ce_function_names_dict.get(i):
+                                        if ce_function_names_dict.get(i.name):
                                             self._rest_client_ce.methods_section = ce_function_names_dict[
-                                                                                       i].str_function + '\n'
+                                                                                       i.name].str_function + '\n'
                                             self._rest_client_base.init = ce_klass
-                                        if pe_function_names_dict.get(i):
+                                        if pe_function_names_dict.get(i.name):
                                             self._rest_client_pe.methods_section = pe_function_names_dict[
-                                                                                       i].str_function + '\n'
+                                                                                       i.name].str_function + '\n'
                                             self._rest_client_pe.init = pe_klass
                                 except Exception as e:
                                     print(e)
@@ -268,7 +275,7 @@ class Generator:
                         method_list = filter(lambda x: x is not None, list(
                             map(lambda x: getattr(klass, x) if callable(getattr(klass, x)) and x.startswith(
                                 '__') is False and '_with_http_info' not in x else None, dir(klass))))
-                        method_list = self._get_methods_without_duplicate(klass, method_list)
+                        # method_list = self._get_methods_without_duplicate(klass, method_list)
 
                         function_list = self._generate_functions(file.filename.split('.')[0], method_list)
 
